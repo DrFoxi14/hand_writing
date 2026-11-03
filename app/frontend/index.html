@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Handwriting Identity Engine</title>
+<style>
+:root{color-scheme:dark;--bg:#0b1220;--panel:#121d30;--line:#293a52;--text:#edf3ff;--muted:#a7b6cb;--blue:#4d91d5;--green:#3e9d80;--amber:#c18c41}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:15px/1.5 system-ui,sans-serif}
+header{padding:24px max(20px,calc((100% - 1180px)/2));border-bottom:1px solid var(--line);background:#0d1728;position:sticky;top:0;z-index:4}
+h1{font-size:23px;margin:0}header p{margin:4px 0 0;color:var(--muted)}
+main{max-width:1180px;margin:24px auto;padding:0 18px 60px}.status,.row,.tabs{display:flex;gap:9px;align-items:center;flex-wrap:wrap}
+.status{margin-bottom:16px}.pill{border:1px solid var(--line);border-radius:50px;padding:4px 10px;color:var(--muted);font-size:12px}
+.tabs{margin-bottom:14px}.tabs button,button{cursor:pointer;border:1px solid var(--line);border-radius:9px;padding:9px 13px;background:#1a2a42;color:var(--text)}
+.tabs button.active,button.primary{background:#245384;border-color:#397db7}.tabs button:hover,button:hover{filter:brightness(1.13)}
+.panel{display:none;padding:20px;background:var(--panel);border:1px solid var(--line);border-radius:14px}.panel.active{display:block}
+h2{font-size:19px;margin:0 0 5px}.hint{color:var(--muted);font-size:13px;margin:0 0 14px}
+.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+.field{display:flex;flex-direction:column;gap:5px;margin:9px 0}.field label{font-size:13px;color:var(--muted)}
+input,textarea,select{max-width:100%;padding:9px;border:1px solid var(--line);border-radius:8px;background:#0b1423;color:var(--text);font:inherit}
+textarea{min-height:90px;resize:vertical}.notice{padding:10px 12px;border-left:3px solid var(--blue);background:#0d1c30;margin:12px 0;border-radius:6px;overflow-wrap:anywhere}.good{border-color:var(--green)}.warn{border-color:var(--amber)}
+pre{padding:12px;background:#09111d;border-radius:8px;white-space:pre-wrap;overflow-wrap:anywhere;font-size:12px;color:#d9e5f5}
+.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;margin-top:14px}
+.page{padding:10px;background:#0d1727;border:1px solid var(--line);border-radius:10px;cursor:pointer}.page img{width:100%;aspect-ratio:3/4;object-fit:contain;background:#172235;border-radius:6px}.page small{display:block;color:var(--muted);overflow-wrap:anywhere}
+.preview{min-height:120px;max-height:500px;overflow:auto;padding:10px;border:1px dashed var(--line);border-radius:9px;background:#080f1b}
+.preview img{display:block;max-width:100%;height:auto;margin:auto}
+.canvas{max-width:100%;height:auto;display:block;background:#09111c;cursor:crosshair;touch-action:none}
+.hidden{display:none!important}
+@media(max-width:760px){.grid{grid-template-columns:1fr}header{position:static}}
+</style>
+</head>
+<body>
+<header><h1>Handwriting Identity Engine</h1><p>Local-first writer analysis, verified samples, synthesis and notebook reconstruction</p></header>
+<main>
+<div class="status"><span class="pill" id="health">Checking API…</span><span class="pill">Local files only</span><span class="pill">Source images are append-only</span></div>
+<nav class="tabs">
+<button class="active" data-tab="dataset">Dataset</button><button data-tab="profile">Profile</button><button data-tab="annotation">Annotation</button><button data-tab="generate">Generate</button><button data-tab="notebook">Notebook editor</button><button data-tab="training">Training</button><button data-tab="evaluation">Evaluation</button>
+</nav>
+<section class="panel active" id="dataset">
+<h2>Dataset ingestion</h2><p class="hint">Import notebook photos. Originals are never overwritten; rectified pages and masks are stored as separate derivatives.</p>
+<div class="row"><input id="upload" type="file" accept="image/*"><button class="primary" id="uploadBtn">Import image</button><button id="refreshBtn">Refresh</button></div>
+<div id="uploadMessage" class="notice hidden"></div><div id="pages" class="cards"></div>
+</section>
+<section class="panel" id="profile">
+<h2>Handwriting profile</h2><p class="hint">These are provisional photo-derived measurements. Connected components are not the same as individual letters.</p>
+<div class="row"><select id="profilePage"><option value="">Recent pages</option></select><button class="primary" id="profileBtn">Analyze</button></div><pre id="profileOutput">Import a page to begin.</pre>
+</section>
+<section class="panel" id="annotation">
+<h2>Transcription and glyph annotation</h2><p class="hint">Select a page, draw a tight rectangle around one full line or one character, then enter its exact Unicode transcription.</p>
+<div class="row"><select id="annotationPage"></select><button id="loadAnnotation">Load rectified page</button><select id="annotationMode"><option value="line">Line sample</option><option value="glyph">Single glyph</option></select></div>
+<div class="preview" style="margin-top:12px"><canvas id="annotationCanvas" class="canvas"></canvas></div>
+<div class="grid"><div class="field"><label>Line transcription or one glyph character</label><input id="annotationText" placeholder="Ex.: ă or an entire handwritten line"></div><div class="field"><label>Contextual glyph position</label><select id="glyphPosition"><option value="any">any</option><option value="initial">initial</option><option value="medial">medial</option><option value="final">final</option><option value="isolated">isolated</option></select></div></div>
+<div class="row"><label class="pill">Page split <select id="split"><option value="train">Train</option><option value="validation">Validation</option></select></label><label class="pill"><input id="verified" type="checkbox"> Mark glyph verified</label><button class="primary" id="saveAnnotation">Save annotation</button><span id="boxInfo" class="pill">No selection</span></div><div id="annotationMessage" class="notice hidden"></div>
+</section>
+<section class="panel" id="generate">
+<h2>Handwriting generation</h2><p class="hint">The sample renderer only uses verified handwriting crops. The neural path requires an actually trained checkpoint.</p>
+<div class="field"><label>Text (Romanian and English)</label><textarea id="textToGenerate">Acesta este un exemplu.</textarea></div>
+<div class="row"><button id="coverageBtn">Check glyph coverage</button><button class="primary" id="glyphGenerate">Generate from verified samples</button><select id="styleLine"><option value="">First training line as style reference</option></select><button id="neuralGenerate">Generate with trained model</button></div>
+<div id="coverage" class="notice warn">Coverage has not been checked.</div><div class="preview"><img id="generated" alt="Generated handwriting"></div>
+</section>
+<section class="panel" id="notebook">
+<h2>Notebook editor</h2><p class="hint">Load the original photo and click at least three polygon points around the only region you authorize for editing. Four corners enable perspective warping.</p>
+<div class="row"><input id="notebookFile" type="file" accept="image/*"><button id="loadNotebook">Load photo</button><button id="clearPolygon">Clear points</button></div>
+<div class="preview" style="margin-top:12px"><canvas id="notebookCanvas" class="canvas"></canvas></div>
+<div class="field"><label>Text to place in the selected area</label><textarea id="notebookText"></textarea></div>
+<button class="primary" id="composeNotebook">Generate and composite</button><div id="notebookMessage" class="notice hidden"></div><div class="preview"><img id="notebookResult" alt="Notebook composite"></div>
+</section>
+<section class="panel" id="training">
+<h2>Personalized training</h2><p class="hint">Writer-conditioned sequence-to-image baseline. Training requires at least 40 training lines and a separate held-out validation page.</p>
+<div class="row"><button class="primary" id="trainingStatus">Check readiness</button><label class="pill">Epochs <input id="epochs" type="number" value="20" min="1" max="200" style="width:70px"></label><button id="runTraining">Start local training</button></div><pre id="trainingOutput">No training status loaded.</pre>
+</section>
+<section class="panel" id="evaluation">
+<h2>Evaluation</h2><p class="hint">Compare aligned reference and generated crops. Metrics describe visual agreement and do not independently prove writer identity.</p>
+<div class="grid"><div class="field"><label>Reference crop</label><input id="referenceFile" type="file" accept="image/*"></div><div class="field"><label>Generated crop</label><input id="generatedFile" type="file" accept="image/*"></div></div>
+<div class="grid"><div class="field"><label>Reference transcription (optional)</label><input id="referenceText"></div><div class="field"><label>Generated transcription (optional)</label><input id="generatedText"></div></div>
+<button class="primary" id="evaluateBtn">Calculate metrics</button><pre id="evaluationOutput">SSIM, ink IoU, grayscale MAE, stroke-width proxy, CER and WER.</pre>
+</section>
+</main>
+<script>
+const $=id=>document.getElementById(id);
+let pages=[],chosenPage=null,annImage=null,annScale=1,annStart=null,annBox=null;
+let noteImage=null,noteScale=1,notePoints=[];
+function show(el,msg,kind){el.textContent=msg;el.classList.remove('hidden','good','warn');if(kind)el.classList.add(kind)}
+async function api(path,opts){const r=await fetch(path,opts||{});if(!r.ok){let d={};try{d=await r.json()}catch(e){d={detail:await r.text()}}throw new Error(typeof d.detail==='string'?d.detail:JSON.stringify(d.detail||d))}return r}
+document.querySelectorAll('[data-tab]').forEach(b=>b.addEventListener('click',()=>{document.querySelectorAll('[data-tab]').forEach(x=>x.classList.toggle('active',x===b));document.querySelectorAll('.panel').forEach(x=>x.classList.toggle('active',x.id===b.dataset.tab))}));
+async function health(){try{const d=await(await api('/api/health')).json();$('health').textContent='API online · '+d.device.device.toUpperCase()}catch(e){$('health').textContent='API offline · run hie-server'}}
+async function refresh(){try{pages=(await(await api('/api/pages')).json()).pages;$('pages').innerHTML='';for(const p of pages){const c=document.createElement('div');c.className='page';const im=document.createElement('img');im.src='/api/pages/'+p.id+'/image?kind=rectified';const name=document.createElement('small');name.textContent=p.original_name+' · '+p.width+'×'+p.height;c.append(im,name);c.onclick=()=>selectPage(p.id);$('pages').append(c)}['profilePage','annotationPage'].forEach(id=>{const s=$(id);s.innerHTML=(id==='profilePage'?'<option value="">Recent pages</option>':'<option value="">Select page</option>')+pages.map(p=>'<option value="'+p.id+'">'+p.original_name+'</option>').join('')});}catch(e){show($('uploadMessage'),e.message,'warn')}}
+function selectPage(id){chosenPage=id;$('profilePage').value=id;$('annotationPage').value=id;loadAnnotation()}
+$('uploadBtn').onclick=async()=>{const f=$('upload').files[0];if(!f)return;const fd=new FormData();fd.append('file',f);try{const d=await(await api('/api/pages',{method:'POST',body:fd})).json();show($('uploadMessage'),d.message,'good');await refresh()}catch(e){show($('uploadMessage'),e.message,'warn')}};
+$('refreshBtn').onclick=refresh;
+$('profileBtn').onclick=async()=>{try{const id=$('profilePage').value;const d=await(await api('/api/profile'+(id?'?page_id='+id:''))).json();$('profileOutput').textContent=JSON.stringify(d,null,2)}catch(e){$('profileOutput').textContent=e.message}};
+function drawAnnotation(){if(!annImage)return;const c=$('annotationCanvas'),ctx=c.getContext('2d');c.width=annImage.naturalWidth;c.height=annImage.naturalHeight;annScale=Math.min(900/c.width,650/c.height,1);c.style.width=(c.width*annScale)+'px';ctx.drawImage(annImage,0,0);if(annBox){ctx.strokeStyle='#f0b65d';ctx.lineWidth=Math.max(2,2/annScale);ctx.strokeRect(...annBox)}}
+async function loadAnnotation(){const id=$('annotationPage').value;if(!id)return;chosenPage=id;annImage=new Image();annImage.onload=drawAnnotation;annImage.src='/api/pages/'+id+'/image?kind=rectified';annBox=null}
+$('loadAnnotation').onclick=loadAnnotation;$('annotationPage').onchange=loadAnnotation;
+$('annotationCanvas').onpointerdown=e=>{if(!annImage)return;const r=e.currentTarget.getBoundingClientRect();annStart=[(e.clientX-r.left)/annScale,(e.clientY-r.top)/annScale]};
+$('annotationCanvas').onpointerup=e=>{if(!annStart)return;const r=e.currentTarget.getBoundingClientRect(),end=[(e.clientX-r.left)/annScale,(e.clientY-r.top)/annScale];const x=Math.round(Math.min(annStart[0],end[0])),y=Math.round(Math.min(annStart[1],end[1]));annBox=[x,y,Math.max(2,Math.round(Math.abs(end[0]-annStart[0]))),Math.max(2,Math.round(Math.abs(end[1]-annStart[1])))];annStart=null;drawAnnotation();$('boxInfo').textContent=annBox.join(', ')};
+$('saveAnnotation').onclick=async()=>{if(!chosenPage||!annBox)return show($('annotationMessage'),'Select a page and draw a box first.','warn');const glyph=$('annotationMode').value==='glyph',text=$('annotationText').value;try{const body=glyph?{page_id:chosenPage,bbox:annBox,character:text,position:$('glyphPosition').value,verified:$('verified').checked}:{page_id:chosenPage,bbox:annBox,text,split:$('split').value};const path=glyph?'/api/annotations/glyphs':'/api/annotations/lines';const d=await(await api(path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})).json();show($('annotationMessage'),JSON.stringify(d),'good')}catch(e){show($('annotationMessage'),e.message,'warn')}};
+$('coverageBtn').onclick=async()=>{try{const text=encodeURIComponent($('textToGenerate').value),d=await(await api('/api/coverage?text='+text)).json();show($('coverage'),'Coverage '+(d.coverage*100).toFixed(1)+'% · missing: '+(d.missing.join(', ')||'none')+' · missing forms: '+JSON.stringify(d.missing_positions),d.missing.length?'warn':'good')}catch(e){show($('coverage'),e.message,'warn')}};
+$('glyphGenerate').onclick=async()=>{try{const r=await api('/api/generate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:$('textToGenerate').value})});$('generated').src=URL.createObjectURL(await r.blob());show($('coverage'),'Rendered using verified glyph crops. This is a collage baseline, not continuous cursive synthesis.','good')}catch(e){show($('coverage'),e.message,'warn')}};
+async function loadTrainingStatus(){const d=await(await api('/api/training/status')).json();$('trainingOutput').textContent=JSON.stringify(d,null,2);$('styleLine').innerHTML='<option value="">First training line</option>'+d.line_annotations.filter(x=>x.split==='train').map(x=>'<option value="'+x.id+'">'+x.text.slice(0,50)+'</option>').join('');return d}
+$('trainingStatus').onclick=async()=>{try{await loadTrainingStatus()}catch(e){$('trainingOutput').textContent=e.message}};
+$('runTraining').onclick=async()=>{try{const r=await api('/api/training/run',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({epochs:Number($('epochs').value||20),min_lines:40})});$('trainingOutput').textContent=JSON.stringify(await r.json(),null,2)}catch(e){$('trainingOutput').textContent=e.message}};
+$('neuralGenerate').onclick=async()=>{try{const r=await api('/api/generate/neural',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:$('textToGenerate').value,style_annotation_id:$('styleLine').value||null})});$('generated').src=URL.createObjectURL(await r.blob());show($('coverage'),'Rendered from the trained checkpoint. Evaluate on held-out text.','good')}catch(e){show($('coverage'),e.message,'warn')}};
+function drawNotebook(){if(!noteImage)return;const c=$('notebookCanvas'),ctx=c.getContext('2d');c.width=noteImage.naturalWidth;c.height=noteImage.naturalHeight;noteScale=Math.min(900/c.width,650/c.height,1);c.style.width=(c.width*noteScale)+'px';ctx.drawImage(noteImage,0,0);if(notePoints.length){ctx.strokeStyle='#f0b65d';ctx.lineWidth=Math.max(2,2/noteScale);ctx.beginPath();notePoints.forEach((p,i)=>i?ctx.lineTo(p[0],p[1]):ctx.moveTo(p[0],p[1]));ctx.closePath();ctx.stroke()}}
+$('loadNotebook').onclick=()=>{const f=$('notebookFile').files[0];if(!f)return;noteImage=new Image();noteImage.onload=drawNotebook;noteImage.src=URL.createObjectURL(f);notePoints=[]};
+$('notebookCanvas').onclick=e=>{if(!noteImage)return;const r=e.currentTarget.getBoundingClientRect();notePoints.push([Math.round((e.clientX-r.left)/noteScale),Math.round((e.clientY-r.top)/noteScale)]);drawNotebook()};
+$('clearPolygon').onclick=()=>{notePoints=[];drawNotebook()};
+$('composeNotebook').onclick=async()=>{const file=$('notebookFile').files[0];if(!file||notePoints.length<3)return show($('notebookMessage'),'Load a photo and select at least three polygon points.','warn');try{const g=await api('/api/generate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:$('notebookText').value,max_width:Math.max(64,noteImage.naturalWidth)})});const generated=await createImageBitmap(await g.blob());const w=noteImage.naturalWidth,h=noteImage.naturalHeight,canvas=document.createElement('canvas');canvas.width=w;canvas.height=h;const ctx=canvas.getContext('2d');const x=Math.min(...notePoints.map(p=>p[0])),y=Math.min(...notePoints.map(p=>p[1]));ctx.drawImage(generated,x,y);const overlay=await new Promise(res=>canvas.toBlob(res,'image/png'));const fd=new FormData();fd.append('original',file);fd.append('overlay',overlay,'overlay.png');fd.append('polygon',JSON.stringify(notePoints));const r=await api('/api/reconstruct',{method:'POST',body:fd});$('notebookResult').src=URL.createObjectURL(await r.blob());show($('notebookMessage'),'Composite ready. Pixels outside your polygon are preserved unchanged.','good')}catch(e){show($('notebookMessage'),e.message,'warn')}};
+$('evaluateBtn').onclick=async()=>{const a=$('referenceFile').files[0],b=$('generatedFile').files[0];if(!a||!b)return $('evaluationOutput').textContent='Choose both images.';const fd=new FormData();fd.append('reference',a);fd.append('generated',b);fd.append('reference_text',$('referenceText').value);fd.append('generated_text',$('generatedText').value);try{$('evaluationOutput').textContent=JSON.stringify(await(await api('/api/evaluate',{method:'POST',body:fd})).json(),null,2)}catch(e){$('evaluationOutput').textContent=e.message}};
+health();refresh();
+</script>
+</body>
+</html>
